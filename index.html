@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Weight loss tracker</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --border: #e3e1da; --fg: #1c1c1a; --muted: #5c5b55;
+    --accent: #0f766e; --grid: #ebe9e3; --good: #0f7a3d; --bad: #b42318; --tip: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --panel: #1f1f1c; --border: #33322e; --fg: #f1f0ea; --muted: #a8a69e;
+      --accent: #2dd4bf; --grid: #2c2b27; --good: #4ade80; --bad: #f87171; --tip: #2a2a26;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; display: flex; flex-direction: column; gap: 24px; }
+  h1 { margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+  .lede { margin: 8px 0 0; color: var(--muted); font-size: 16px; line-height: 1.5; }
+  .lede b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .card, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card { display: flex; flex-direction: column; gap: 4px; }
+  .label { font-size: 13px; color: var(--muted); }
+  .big { font-size: 32px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 15px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  .panel { display: flex; flex-direction: column; gap: 12px; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+  h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  .range { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .range button { font: inherit; font-size: 13px; background: transparent; color: var(--muted); border: 0; padding: 8px 14px; cursor: pointer; min-height: 36px; }
+  .range button + button { border-left: 1px solid var(--border); }
+  .range button[aria-pressed="true"] { background: var(--bg); color: var(--fg); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .sw-line { width: 16px; height: 2px; background: var(--accent); border-radius: 1px; }
+  .sw-dot { width: 7px; height: 7px; background: var(--accent); opacity: .45; border-radius: 50%; }
+  .chart { position: relative; min-height: 320px; }
+  @media (max-width: 560px) { .chart { min-height: 260px; } }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .chart text { fill: var(--muted); font-size: 12px; font-family: inherit; }
+  .msg { padding: 40px 0; color: var(--muted); }
+  .tip { position: absolute; pointer-events: none; background: var(--tip); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums; display: none; }
+  .tip .d { color: var(--muted); }
+  details { font-size: 13px; color: var(--muted); }
+  details summary { cursor: pointer; }
+  details p { line-height: 1.5; margin: 6px 0 0; }
+  .foot { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Weight loss tracker</h1>
+    <p class="lede" id="lede">Loading weigh-ins…</p>
+  </header>
+
+  <section class="cards" aria-label="Headline figures">
+    <div class="card"><span class="label">Latest weigh-in</span><span><span class="big" id="latest">—</span><span class="unit">kg</span></span><span class="sub" id="latestDate">&nbsp;</span></div>
+    <div class="card"><span class="label">7-day average</span><span><span class="big" id="trend">—</span><span class="unit">kg</span></span><span class="sub"><span id="change30">—</span> kg vs 30 days ago</span></div>
+    <div class="card"><span class="label">Weight lost in previous 7 days</span><span><span class="big" id="lost7">—</span><span class="unit">kg</span></span><span class="sub" id="lost7Sub">&nbsp;</span></div>
+    <div class="card"><span class="label">Goal</span><span><span class="big" id="goal">—</span><span class="unit">kg</span></span><span class="sub"><span id="toGo">—</span> kg to go</span><span class="sub" id="eta" hidden></span></div>
+  </section>
+
+  <section class="panel">
+    <div class="head">
+      <h2>Weight over time</h2>
+      <div class="range" role="group" aria-label="Time range">
+        <button type="button" data-range="3">3M</button>
+        <button type="button" data-range="6">6M</button>
+        <button type="button" data-range="12" aria-pressed="true">1Y</button>
+        <button type="button" data-range="0">All</button>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="key"><span class="sw-line"></span>7-day average</span>
+      <span class="key"><span class="sw-dot"></span>Morning weigh-in</span>
+    </div>
+    <div class="chart" id="chart"><div class="msg">Loading…</div></div>
+  </section>
+
+  <details>
+    <summary>How these numbers are worked out</summary>
+    <p>Every figure comes from the Morning Weight column of the Tracker tab in the Weigh Ins Google Sheet. The 7-day average is the mean of the weigh-ins in the seven days up to each date; days with no weigh-in are skipped, so a gap doesn't pull the average down. Changes use the 7-day average. Weight lost in the previous 7 days compares today's 7-day average with the last one at least 7 days earlier. Weeks to goal divides the kg still to lose by the average weekly drop in the 7-day average over the last 4 weeks (measured from the last average at least 28 days earlier); it only gives a number when that average is falling. The line breaks where there's more than a week without a weigh-in.</p>
+  </details>
+  <p class="foot" id="foot"></p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ===========================================================================
+  // PASTE YOUR SHEET LINK HERE
+  // In Google Sheets: File > Share > Publish to web > choose the "Tracker" tab
+  // and "Comma-separated values (.csv)" > Publish. Copy the link (it ends in
+  // output=csv) and paste it between the quotes below.
+  // ===========================================================================
+  var SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRYQCgpiwDB9O1sEqrEzfgP5LaJzcstP2Hy3nLXjdDwP0K0tGWti-gG_0Esa7BsWwTGpyYhCW0g3ra8/pub?gid=0&single=true&output=csv';
+
+  var DAY = 864e5;
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var state = { rows: [], months: 12 };
+
+  function $(id) { return document.getElementById(id); }
+  function kg(v) { return v.toFixed(1); }
+  function fmtDate(t, withDay) {
+    var d = new Date(t);
+    return (withDay ? DAYS[d.getUTCDay()] + ' ' : '') + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+  }
+
+  // ---- Read the sheet's CSV ------------------------------------------------
+  function parseCsv(text) {
+    var lines = text.replace(/^﻿/, '').split(/\r?\n/);
+    var head = lines[0].split(',').map(function (h) { return h.trim().toLowerCase(); });
+    var iDate = head.indexOf('date'), iW = head.indexOf('morning weight'), iGoal = head.indexOf('goal');
+    if (iDate < 0 || iW < 0) throw new Error('The sheet has no Date or Morning Weight column.');
+    var rows = [], goal = null;
+    for (var n = 1; n < lines.length; n++) {
+      var c = lines[n].split(',');
+      var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((c[iDate] || '').trim());
+      var w = parseFloat(c[iW]);
+      if (!m || !isFinite(w)) continue;
+      var g = iGoal >= 0 ? parseFloat(c[iGoal]) : NaN;
+      if (isFinite(g)) goal = g;
+      rows.push({ t: Date.UTC(+m[3], +m[2] - 1, +m[1]), weight: w });
+    }
+    rows.sort(function (a, b) { return a.t - b.t; });
+    // 7-day average of the weigh-ins in the 7 days up to each date (missing days skipped)
+    var start = 0, sum = 0;
+    for (var i = 0; i < rows.length; i++) {
+      sum += rows[i].weight;
+      while (rows[start].t <= rows[i].t - 7 * DAY) { sum -= rows[start].weight; start++; }
+      rows[i].trend = Math.round(sum / (i - start + 1) * 10) / 10;
+    }
+    // Round for display only after the averages are worked out
+    rows.forEach(function (r) { r.weight = Math.round(r.weight * 10) / 10; });
+    return { rows: rows, goal: goal };
+  }
+
+  // ---- Headline figures ----------------------------------------------------
+  function drawStats(rows, goal) {
+    var last = rows[rows.length - 1];
+    var then = null, week = null, month = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].t <= last.t - 30 * DAY) then = rows[i];
+      if (rows[i].t <= last.t - 7 * DAY) week = rows[i];
+      if (rows[i].t <= last.t - 28 * DAY) month = rows[i];
+    }
+    var change = then ? Math.round((last.trend - then.trend) * 10) / 10 : null;
+    var toGoal = goal == null ? null : Math.round((last.trend - goal) * 10) / 10;
+
+    $('latest').textContent = kg(last.weight);
+    $('latestDate').textContent = fmtDate(last.t);
+    $('trend').textContent = kg(last.trend);
+    var ch = $('change30');
+    ch.className = '';
+    if (change == null) ch.textContent = '—';
+    else {
+      ch.textContent = (change > 0 ? '+' : change < 0 ? '−' : '±') + kg(Math.abs(change));
+      if (change !== 0) ch.className = change < 0 ? 'good' : 'bad';
+    }
+    // Weight lost in previous 7 days: 7-day average now vs the last one at least 7 days earlier
+    var lostEl = $('lost7'), lostSub = $('lost7Sub');
+    lostEl.className = 'big';
+    if (!week) { lostEl.textContent = '—'; lostSub.textContent = 'Not enough weigh-ins yet'; }
+    else {
+      var lost = Math.round((week.trend - last.trend) * 10) / 10;
+      lostEl.textContent = (lost < 0 ? '−' : '') + kg(Math.abs(lost));
+      if (lost !== 0) lostEl.className = 'big ' + (lost > 0 ? 'good' : 'bad');
+      lostSub.textContent = (lost > 0 ? 'Down from ' : lost < 0 ? 'Up from ' : 'Same as ') + kg(week.trend) + ' kg on ' + fmtDate(week.t);
+    }
+    $('goal').textContent = goal == null ? '—' : kg(goal);
+    $('toGo').textContent = toGoal == null ? '—' : kg(Math.max(0, toGoal));
+
+    // Weeks to goal at the average weekly loss over the last 4 weeks
+    var eta = $('eta');
+    eta.hidden = true;
+    if (month && toGoal != null && toGoal > 0) {
+      var rate = Math.round((month.trend - last.trend) / ((last.t - month.t) / (7 * DAY)) * 100) / 100;
+      eta.hidden = false;
+      if (rate > 0) eta.textContent = 'About ' + Math.ceil(toGoal / rate).toLocaleString('en-GB') + ' weeks to go at ' + kg(rate) + ' kg a week (last 4 weeks)';
+      else eta.textContent = 'No estimate yet: ' + kg(Math.abs(rate)) + ' kg a week ' + (rate < 0 ? 'gained' : 'lost') + ' over the last 4 weeks';
+    }
+
+    var lede = $('lede');
+    lede.textContent = '';
+    var parts = ['My 7-day average is ', [kg(last.trend)], ' kg'];
+    if (change != null) parts.push(change === 0 ? ', unchanged over the last 30 days' : ', ' + (change < 0 ? 'down ' : 'up '), change === 0 ? '' : [kg(Math.abs(change))], change === 0 ? '' : ' kg over the last 30 days');
+    if (toGoal != null) parts.push(toGoal > 0 ? ', and ' : '', toGoal > 0 ? [kg(toGoal)] : '', toGoal > 0 ? ' kg above my goal.' : ' — goal reached.');
+    else parts.push('.');
+    parts.forEach(function (p) {
+      if (Array.isArray(p)) { var b = document.createElement('b'); b.textContent = p[0]; lede.appendChild(b); }
+      else if (p) lede.appendChild(document.createTextNode(p));
+    });
+    $('foot').textContent = 'Last weigh-in ' + fmtDate(last.t) + ' · ' + rows.length.toLocaleString('en-GB') + ' weigh-ins since ' + fmtDate(rows[0].t);
+  }
+
+  // ---- Chart ---------------------------------------------------------------
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(SVGNS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function niceTicks(lo, hi, count) {
+    var span = hi - lo, step = Math.pow(10, Math.floor(Math.log10(span / count)));
+    var err = span / count / step;
+    if (err >= 7.5) step *= 10; else if (err >= 3.5) step *= 5; else if (err >= 1.5) step *= 2;
+    var ticks = [];
+    for (var v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+    return { ticks: ticks, lo: Math.floor(lo / step) * step, hi: Math.ceil(hi / step) * step };
+  }
+  function monthTicks(t0, t1, maxTicks) {
+    var d0 = new Date(t0), months = (new Date(t1).getUTCFullYear() - d0.getUTCFullYear()) * 12 + new Date(t1).getUTCMonth() - d0.getUTCMonth();
+    var steps = [1, 2, 3, 6, 12], step = 12;
+    for (var i = 0; i < steps.length; i++) if (months / steps[i] <= maxTicks) { step = steps[i]; break; }
+    var out = [], y = d0.getUTCFullYear(), m = d0.getUTCMonth() + 1;
+    while (m % step !== 0 && step <= 12) { m++; }
+    for (;;) {
+      var yy = y + Math.floor(m / 12), mm = m % 12, t = Date.UTC(yy, mm, 1);
+      if (t > t1) break;
+      if (t >= t0) out.push({ t: t, label: mm === 0 ? String(yy) : MONTHS[mm] });
+      m += step;
+    }
+    return out;
+  }
+
+  function drawChart() {
+    var box = $('chart');
+    box.textContent = '';
+    var all = state.rows;
+    if (!all.length) { box.innerHTML = '<div class="msg">No weigh-ins yet.</div>'; return; }
+    var lastT = all[all.length - 1].t, from = all[0].t;
+    if (state.months) { var d = new Date(lastT); from = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - state.months, d.getUTCDate()); }
+    var rows = all.filter(function (r) { return r.t >= from; });
+    if (!rows.length) return;
+
+    var W = Math.max(280, box.clientWidth), H = W < 520 ? 260 : 320;
+    var m = { top: 12, right: 12, bottom: 28, left: 40 };
+    var lo = Infinity, hi = -Infinity;
+    rows.forEach(function (r) { lo = Math.min(lo, r.weight, r.trend); hi = Math.max(hi, r.weight, r.trend); });
+    var pad = Math.max(0.5, (hi - lo) * 0.08);
+    var yt = niceTicks(lo - pad, hi + pad, H < 300 ? 4 : 5);
+
+    var svg = el('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+      'aria-label': 'Line chart of 7-day average weight with daily weigh-ins, ' + fmtDate(rows[0].t) + ' to ' + fmtDate(lastT) });
+    box.appendChild(svg);
+
+    // y axis labels: measure the widest to set the left margin
+    var labels = yt.ticks.map(function (v) { return el('text', { 'text-anchor': 'end', 'dominant-baseline': 'middle' }, svg); });
+    yt.ticks.forEach(function (v, i) { labels[i].textContent = String(Math.round(v)); });
+    var wMax = 0; labels.forEach(function (l) { wMax = Math.max(wMax, l.getComputedTextLength()); });
+    m.left = Math.ceil(wMax) + 14;
+
+    var x0 = rows[0].t, x1 = lastT === x0 ? x0 + DAY : lastT;
+    function x(t) { return m.left + (t - x0) / (x1 - x0) * (W - m.left - m.right); }
+    function y(v) { return H - m.bottom - (v - yt.lo) / (yt.hi - yt.lo) * (H - m.top - m.bottom); }
+
+    var grid = el('g', {}, null); svg.insertBefore(grid, svg.firstChild);
+    yt.ticks.forEach(function (v, i) {
+      el('line', { x1: m.left, x2: W - m.right, y1: y(v), y2: y(v), stroke: 'var(--grid)' }, grid);
+      labels[i].setAttribute('x', m.left - 8); labels[i].setAttribute('y', y(v));
+    });
+    el('line', { x1: m.left, x2: W - m.right, y1: H - m.bottom, y2: H - m.bottom, stroke: 'var(--border)' }, grid);
+
+    var xt = monthTicks(x0, x1, Math.max(2, Math.floor((W - m.left) / 80)));
+    if (xt.length < 2) xt = [{ t: x0, label: fmtDate(x0).slice(0, -5) }, { t: x1, label: fmtDate(x1).slice(0, -5) }];
+    xt.forEach(function (tk) {
+      var tx = el('text', { x: x(tk.t), y: H - m.bottom + 18, 'text-anchor': 'middle' }, svg);
+      tx.textContent = tk.label;
+    });
+
+    var dots = el('g', { fill: 'var(--accent)', opacity: '0.35' }, svg), r = rows.length > 400 ? 1.6 : 2.4;
+    rows.forEach(function (p) { el('circle', { cx: x(p.t), cy: y(p.weight), r: r }, dots); });
+
+    var dPath = '', prev = null;
+    rows.forEach(function (p) {
+      dPath += (prev === null || p.t - prev > 7 * DAY ? 'M' : 'L') + x(p.t).toFixed(1) + ',' + y(p.trend).toFixed(1);
+      prev = p.t;
+    });
+    el('path', { d: dPath, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+
+    // Tooltip
+    var rule = el('line', { y1: m.top, y2: H - m.bottom, stroke: 'var(--muted)', 'stroke-opacity': '0.4', display: 'none' }, svg);
+    var dot = el('circle', { r: 4, fill: 'var(--accent)', stroke: 'var(--panel)', 'stroke-width': 2, display: 'none' }, svg);
+    var tip = document.createElement('div'); tip.className = 'tip';
+    var tD = document.createElement('div'); tD.className = 'd';
+    var tA = document.createElement('div'), tW = document.createElement('div');
+    tip.appendChild(tD); tip.appendChild(tA); tip.appendChild(tW); box.appendChild(tip);
+    var hit = el('rect', { x: m.left, y: m.top, width: W - m.left - m.right, height: H - m.top - m.bottom, fill: 'transparent', style: 'cursor:crosshair' }, svg);
+    function show(ev) {
+      var rect = svg.getBoundingClientRect();
+      var px = (ev.clientX - rect.left) * (W / rect.width);
+      var t = x0 + (px - m.left) / (W - m.left - m.right) * (x1 - x0);
+      var lo = 0, hi = rows.length - 1;
+      while (lo < hi) { var mid = (lo + hi) >> 1; if (rows[mid].t < t) lo = mid + 1; else hi = mid; }
+      if (lo > 0 && Math.abs(rows[lo - 1].t - t) < Math.abs(rows[lo].t - t)) lo--;
+      var p = rows[lo], cx = x(p.t);
+      rule.setAttribute('x1', cx); rule.setAttribute('x2', cx); rule.removeAttribute('display');
+      dot.setAttribute('cx', cx); dot.setAttribute('cy', y(p.trend)); dot.removeAttribute('display');
+      tD.textContent = fmtDate(p.t, true);
+      tA.textContent = '7-day average: ' + kg(p.trend) + ' kg';
+      tW.textContent = 'Weigh-in: ' + kg(p.weight) + ' kg';
+      tip.style.display = 'block';
+      var left = cx * (rect.width / W) + 12;
+      if (left + tip.offsetWidth > box.clientWidth) left = cx * (rect.width / W) - tip.offsetWidth - 12;
+      tip.style.left = Math.max(0, left) + 'px';
+      tip.style.top = m.top + 'px';
+    }
+    function hide() { rule.setAttribute('display', 'none'); dot.setAttribute('display', 'none'); tip.style.display = 'none'; }
+    hit.addEventListener('pointermove', show);
+    hit.addEventListener('pointerdown', show);
+    hit.addEventListener('pointerleave', hide);
+  }
+
+  // ---- Controls ------------------------------------------------------------
+  Array.prototype.forEach.call(document.querySelectorAll('.range button'), function (b) {
+    b.addEventListener('click', function () {
+      state.months = +b.getAttribute('data-range');
+      Array.prototype.forEach.call(document.querySelectorAll('.range button'), function (o) { o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); });
+      drawChart();
+    });
+  });
+  var resizeTimer;
+  window.addEventListener('resize', function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawChart, 150); });
+
+  // ---- Load ----------------------------------------------------------------
+  if (SHEET_CSV_URL.indexOf('PASTE_') === 0) {
+    $('lede').textContent = 'The weigh-ins didn’t load.';
+    $('chart').innerHTML = '';
+    var m0 = document.createElement('div'); m0.className = 'msg';
+    m0.textContent = 'No sheet link yet. Open index.html and paste your published CSV link into SHEET_CSV_URL.';
+    $('chart').appendChild(m0);
+    return;
+  }
+
+  fetch(SHEET_CSV_URL, { cache: 'no-store' })
+    .then(function (res) { return res.text().then(function (txt) { if (!res.ok) throw new Error(txt); return txt; }); })
+    .then(function (txt) {
+      var data = parseCsv(txt);
+      if (!data.rows.length) throw new Error('No weigh-ins found in the sheet.');
+      state.rows = data.rows;
+      drawStats(data.rows, data.goal);
+      drawChart();
+    })
+    .catch(function (err) {
+      $('lede').textContent = 'The weigh-ins didn’t load.';
+      $('chart').innerHTML = '';
+      var msg = document.createElement('div'); msg.className = 'msg';
+      msg.textContent = err && err.message ? err.message : 'Couldn’t read the sheet. Check the link in index.html is the published CSV link for the Tracker tab.';
+      $('chart').appendChild(msg);
+    });
+})();
+</script>
+</body>
+</html>
